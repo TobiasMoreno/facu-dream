@@ -47,6 +47,7 @@ type View = 'data' | 'result' | 'compare'
 const money = new Intl.NumberFormat('es-AR', { style: 'currency', currency: 'USD', minimumFractionDigits: 2 })
 const integer = new Intl.NumberFormat('es-AR', { maximumFractionDigits: 0 })
 const COLORS = ['#ef6a3a', '#2b7a78', '#dcae49', '#477998', '#88498f']
+const TRANSPORT_COLORS = ['#173e48', '#2b7a78', '#dcae49', '#477998', '#88498f', '#788b91']
 
 function initialState(): StoredAppState {
   const stored = loadState()
@@ -362,11 +363,20 @@ function ValidationPanel({ errors }: { errors: string[] }) {
 
 function ResultView({ result, data, optimizing, onOptimize }: { result?: OptimizationResult; data: ScenarioData; optimizing: boolean; onOptimize: () => void }) {
   const status = optimizing ? 'running' : result?.status ?? 'idle'
-  const chartData = data.plants.map((plant) => ({
-    name: plant.name,
-    Marítimo: result?.allocations.filter((item) => item.plantId === plant.id && item.mode === 'Marítimo').reduce((sum, item) => sum + item.quantity, 0) ?? 0,
-    Rodoviario: result?.allocations.find((item) => item.id === `road-${plant.id}`)?.quantity ?? 0,
-  }))
+  const transportMeans = [
+    ...data.carriers.map((carrier, index) => ({ key: `carrier_${carrier.id}`, label: carrier.name, color: TRANSPORT_COLORS[index % TRANSPORT_COLORS.length], carrierId: carrier.id })),
+    { key: 'road', label: 'Rodoviario', color: '#ef6a3a', carrierId: undefined },
+  ]
+  const chartData = data.plants.map((plant) => {
+    const row: Record<string, string | number> = { name: plant.name }
+    data.carriers.forEach((carrier) => {
+      row[`carrier_${carrier.id}`] = result?.allocations
+        .filter((item) => item.plantId === plant.id && item.carrierId === carrier.id)
+        .reduce((sum, item) => sum + item.quantity, 0) ?? 0
+    })
+    row.road = result?.allocations.find((item) => item.id === `road-${plant.id}`)?.quantity ?? 0
+    return row
+  })
   const costData = result?.allocations.reduce<Array<{ name: string; value: number }>>((items, allocation) => {
     const found = items.find((item) => item.name === allocation.mode)
     if (found) found.value += allocation.totalCost
@@ -417,8 +427,20 @@ function ResultView({ result, data, optimizing, onOptimize }: { result?: Optimiz
           </section>
 
           <section className="panel chart-panel">
-            <SectionHeader number="04" icon={<BarChart3 />} title="Distribución por planta" description="Comparación de modalidades en vehículos." />
-            <ResponsiveContainer width="100%" height={280}><BarChart data={chartData} margin={{ top: 15, right: 10, left: -18, bottom: 0 }}><CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#d9d6cb" /><XAxis dataKey="name" tick={{ fill: '#53646a', fontSize: 12 }} axisLine={false} tickLine={false} /><YAxis tick={{ fill: '#53646a', fontSize: 12 }} axisLine={false} tickLine={false} /><Tooltip formatter={(value) => integer.format(Number(value))} /><Legend /><Bar dataKey="Marítimo" stackId="a" fill="#173e48" radius={[0, 0, 4, 4]} /><Bar dataKey="Rodoviario" stackId="a" fill="#ef6a3a" radius={[4, 4, 0, 0]} /></BarChart></ResponsiveContainer>
+            <SectionHeader number="04" icon={<BarChart3 />} title="Volumen por planta y medio" description="Cuántos vehículos aporta cada naviera y el rodoviario en cada origen." />
+            <ResponsiveContainer width="100%" height={280}><BarChart data={chartData} margin={{ top: 15, right: 10, left: -18, bottom: 0 }}><CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#d9d6cb" /><XAxis dataKey="name" tick={{ fill: '#53646a', fontSize: 12 }} axisLine={false} tickLine={false} /><YAxis tick={{ fill: '#53646a', fontSize: 12 }} axisLine={false} tickLine={false} /><Tooltip formatter={(value, name) => [integer.format(Number(value)), String(name)]} /><Legend />{transportMeans.map((medium, index) => <Bar key={medium.key} dataKey={medium.key} name={medium.label} stackId="transport" fill={medium.color} radius={index === transportMeans.length - 1 ? [4, 4, 0, 0] : undefined} />)}</BarChart></ResponsiveContainer>
+            <div className="transport-matrix-scroll">
+              <div className="transport-matrix" style={{ gridTemplateColumns: `minmax(105px, 1.25fr) repeat(${transportMeans.length}, minmax(66px, 1fr)) minmax(70px, .8fr)` }}>
+                <div className="matrix-head">Planta</div>
+                {transportMeans.map((medium) => <div className="matrix-head medium-head" key={medium.key}><i style={{ background: medium.color }} />{medium.label}</div>)}
+                <div className="matrix-head total-head">Total</div>
+                {chartData.flatMap((row) => [
+                  <div className="matrix-plant" key={`${row.name}-name`}>{row.name}</div>,
+                  ...transportMeans.map((medium) => <div className="matrix-value" key={`${row.name}-${medium.key}`}>{integer.format(Number(row[medium.key]))}</div>),
+                  <div className="matrix-value matrix-total" key={`${row.name}-total`}>{integer.format(transportMeans.reduce((sum, medium) => sum + Number(row[medium.key]), 0))}</div>,
+                ])}
+              </div>
+            </div>
           </section>
 
           <section className="panel chart-panel">
