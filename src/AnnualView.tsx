@@ -23,6 +23,7 @@ import {
   XAxis,
   YAxis,
 } from 'recharts'
+import type { LabelProps } from 'recharts'
 import { terminalScopeLabel } from './constants'
 import { createAnnualPlan, MONTHS, monthlyVolume, optimizeAnnualPlan, validateAnnualPlan } from './lib/annualPlan'
 import { validateScenario } from './lib/validation'
@@ -200,7 +201,7 @@ function AnnualResults({ plan, scenario, selectedMonth, onSelectMonth, onRun, op
 
     <section className="panel annual-chart-panel">
       <div className="annual-section-heading"><div><span className="eyebrow">01 / PANORAMA</span><h2>Distribución mes a mes</h2><p>Aporte de cada naviera y del transporte rodoviario.</p></div><ChartMeasureSelect value={chartMeasure} onChange={setChartMeasure} /></div>
-      <ResponsiveContainer width="100%" height={320}><BarChart data={displayedChartData} margin={{ top: 18, right: 22, left: -5, bottom: 0 }}><CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#d9d6cb" /><XAxis dataKey="month" tick={{ fill: '#53646a', fontSize: 11 }} axisLine={false} tickLine={false} /><YAxis domain={chartMeasure === 'percentage' ? [0, 100] : undefined} tickFormatter={chartMeasure === 'percentage' ? (value) => `${value}%` : undefined} tick={{ fill: '#53646a', fontSize: 11 }} axisLine={false} tickLine={false} /><Tooltip formatter={(value, name) => [chartMeasure === 'percentage' ? `${Number(value).toFixed(1)}%` : `${integer.format(Number(value))} vehículos`, String(name)]} /><Legend />{means.map((medium) => <Bar key={medium.key} dataKey={medium.key} name={medium.label} stackId="month" fill={medium.color} />)}</BarChart></ResponsiveContainer>
+      <ResponsiveContainer width="100%" height={320}><BarChart data={displayedChartData} margin={{ top: 18, right: 22, left: -5, bottom: 0 }}><CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#d9d6cb" /><XAxis dataKey="month" tick={{ fill: '#53646a', fontSize: 11 }} axisLine={false} tickLine={false} /><YAxis domain={chartMeasure === 'percentage' ? [0, 100] : undefined} tickFormatter={chartMeasure === 'percentage' ? (value) => `${value}%` : undefined} tick={{ fill: '#53646a', fontSize: 11 }} axisLine={false} tickLine={false} /><Tooltip formatter={(value, name) => [chartMeasure === 'percentage' ? `${Number(value).toFixed(1)}%` : `${integer.format(Number(value))} vehículos`, String(name)]} /><Legend />{means.map((medium) => <Bar key={medium.key} dataKey={medium.key} name={medium.label} stackId="month" fill={medium.color} label={{ content: renderBarValue(chartMeasure, medium.color === '#dcae49' ? '#112a33' : '#ffffff') }} />)}</BarChart></ResponsiveContainer>
     </section>
 
     <section className="panel">
@@ -242,7 +243,7 @@ function MonthlyDetail({ result, month, scenario }: { result: OptimizationResult
   return <>
     <section className="panel annual-chart-panel">
       <div className="annual-section-heading"><div><span className="eyebrow">03 / {MONTHS[month].long.toUpperCase()}</span><h2>Volumen por planta y medio</h2><p>El mismo análisis del resultado mensual, expresado en unidades o participación.</p></div><ChartMeasureSelect value={chartMeasure} onChange={setChartMeasure} /></div>
-      <ResponsiveContainer width="100%" height={280}><BarChart data={displayedPlantData} margin={{ top: 16, right: 18, left: -8, bottom: 0 }}><CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#d9d6cb" /><XAxis dataKey="name" tick={{ fill: '#53646a', fontSize: 11 }} axisLine={false} tickLine={false} /><YAxis domain={chartMeasure === 'percentage' ? [0, 100] : undefined} tickFormatter={chartMeasure === 'percentage' ? (value) => `${value}%` : undefined} tick={{ fill: '#53646a', fontSize: 11 }} axisLine={false} tickLine={false} /><Tooltip formatter={(value, name) => [chartMeasure === 'percentage' ? `${Number(value).toFixed(1)}%` : `${integer.format(Number(value))} vehículos`, String(name)]} /><Legend />{means.map((medium) => <Bar key={medium.key} dataKey={medium.key} name={medium.label} stackId="plant" fill={medium.color} />)}</BarChart></ResponsiveContainer>
+      <ResponsiveContainer width="100%" height={280}><BarChart data={displayedPlantData} margin={{ top: 16, right: 18, left: -8, bottom: 0 }}><CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#d9d6cb" /><XAxis dataKey="name" tick={{ fill: '#53646a', fontSize: 11 }} axisLine={false} tickLine={false} /><YAxis domain={chartMeasure === 'percentage' ? [0, 100] : undefined} tickFormatter={chartMeasure === 'percentage' ? (value) => `${value}%` : undefined} tick={{ fill: '#53646a', fontSize: 11 }} axisLine={false} tickLine={false} /><Tooltip formatter={(value, name) => [chartMeasure === 'percentage' ? `${Number(value).toFixed(1)}%` : `${integer.format(Number(value))} vehículos`, String(name)]} /><Legend />{means.map((medium) => <Bar key={medium.key} dataKey={medium.key} name={medium.label} stackId="plant" fill={medium.color} label={{ content: renderBarValue(chartMeasure, medium.color === '#dcae49' ? '#112a33' : '#ffffff') }} />)}</BarChart></ResponsiveContainer>
     </section>
     <div className="annual-detail-grid">
     <section className="panel annual-detail-main">
@@ -273,3 +274,13 @@ function ChartMeasureSelect({ value, onChange }: { value: 'volume' | 'percentage
 
 const numberValue = (value: string) => value === '' ? 0 : Number(value)
 const normalize = (value: string) => value.trim().toLocaleLowerCase()
+
+function renderBarValue(measure: 'volume' | 'percentage', fill: string) {
+  return ({ viewBox, value }: LabelProps) => {
+    if (!viewBox || !('x' in viewBox) || viewBox.width < 30 || viewBox.height < 18 || !Number(value)) return <></>
+    const numericValue = Number(value)
+    const label = measure === 'percentage' ? `${numericValue.toFixed(1)}%` : integer.format(numericValue)
+    if (label.length * 4.8 > viewBox.width) return <></>
+    return <text x={viewBox.x + viewBox.width / 2} y={viewBox.y + viewBox.height / 2} fill={fill} textAnchor="middle" dominantBaseline="central" fontSize="8" fontWeight="700">{label}</text>
+  }
+}
