@@ -1,0 +1,85 @@
+import { beforeAll, describe, expect, it } from 'vitest'
+import GLPK, { type GLPK as NodeGLPK } from 'glpk.js/node'
+import { cloneInitialData } from '../data/defaultScenario'
+import { optimizeTransport } from './optimizer'
+
+describe('optimizeTransport', () => {
+  let solver: NodeGLPK
+
+  beforeAll(async () => {
+    solver = await GLPK()
+  })
+
+  it('encuentra el costo óptimo del caso inicial', async () => {
+    const result = await optimizeTransport(cloneInitialData(), solver)
+
+    expect(result.status).toBe('optimal')
+    expect(result.totalCost).toBeCloseTo(1_200_303, 2)
+    expect(result.averageCost).toBeCloseTo(600.1515, 4)
+    expect(result.totalVehicles).toBe(2000)
+    expect(result.roadByPlant.reduce((sum, item) => sum + item.quantity, 0)).toBe(500)
+  })
+
+  it('produce cantidades enteras, no negativas y conserva cada volumen', async () => {
+    const data = cloneInitialData()
+    const result = await optimizeTransport(data, solver)
+
+    expect(result.status).toBe('optimal')
+    for (const allocation of result.allocations) {
+      expect(Number.isInteger(allocation.quantity)).toBe(true)
+      expect(allocation.quantity).toBeGreaterThanOrEqual(0)
+    }
+    for (const plant of data.plants) {
+      const transported = result.allocations
+        .filter((allocation) => allocation.plantId === plant.id)
+        .reduce((sum, allocation) => sum + allocation.quantity, 0)
+      expect(transported).toBe(plant.volume)
+    }
+  })
+
+  it('respeta mínimos y capacidades por naviera', async () => {
+    const data = cloneInitialData()
+    const result = await optimizeTransport(data, solver)
+
+    expect(result.status).toBe('optimal')
+    result.carrierSummaries.forEach((summary) => {
+      expect(summary.quantity).toBeGreaterThanOrEqual(summary.min)
+      if (summary.max !== null) expect(summary.quantity).toBeLessThanOrEqual(summary.max)
+    })
+  })
+
+  it('cumple una obligación rodoviaria diferente para cada planta', async () => {
+    const data = cloneInitialData()
+    data.plants = data.plants.map((plant) => ({
+      ...plant,
+      roadRule: { type: 'exact', quantity: plant.id === 'fiasa' ? 500 : 100 },
+    }))
+
+    const result = await optimizeTransport(data, solver)
+
+    expect(result.status).toBe('optimal')
+    expect(result.roadByPlant.find((item) => item.plantId === 'fiasa')?.quantity).toBe(500)
+    expect(result.roadByPlant.find((item) => item.plantId === 'porto-real')?.quantity).toBe(100)
+  })
+
+  it('informa inviabilidad sin relajar restricciones', async () => {
+    const data = cloneInitialData()
+    data.carriers = data.carriers.map((carrier) => ({ ...carrier, max: 100 }))
+
+    const result = await optimizeTransport(data, solver)
+
+    expect(result.status).toBe('infeasible')
+    expect(result.allocations).toHaveLength(0)
+    expect(result.messages.join(' ')).toContain('capacidad marítima total')
+  })
+
+  it('rechaza combinaciones de tarifas duplicadas antes de resolver', async () => {
+    const data = cloneInitialData()
+    data.seaRates.push({ ...data.seaRates[0], id: 'duplicated-rate' })
+
+    const result = await optimizeTransport(data, solver)
+
+    expect(result.status).toBe('invalid')
+    expect(result.messages.join(' ')).toContain('combinaciones duplicadas')
+  })
+})
