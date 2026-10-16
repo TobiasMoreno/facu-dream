@@ -77,6 +77,19 @@ export interface OptimizationResult {
   optimizedAt?: string
 }
 
+export interface AnnualMonthResult {
+  month: number
+  result: OptimizationResult
+}
+
+export interface AnnualPlan {
+  year: number
+  /** Volumen mensual por planta. Cada arreglo usa los índices 0 (enero) a 11 (diciembre). */
+  monthlyVolumes: Record<string, number[]>
+  results?: AnnualMonthResult[]
+  optimizedAt?: string
+}
+
 export interface EffectiveAllocation {
   id: string
   plantId: string
@@ -91,6 +104,7 @@ export interface Scenario {
   name: string
   data: ScenarioData
   result?: OptimizationResult
+  annualPlan?: AnnualPlan
   effectiveDistribution?: EffectiveAllocation[]
   updatedAt: string
 }

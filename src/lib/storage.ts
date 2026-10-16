@@ -1,4 +1,4 @@
-import type { RoadRule, ScenarioData, StoredAppState } from '../types'
+import type { AnnualPlan, RoadRule, ScenarioData, StoredAppState } from '../types'
 import { normalizeTerminal } from '../constants'
 import type { TerminalScope } from '../constants'
 
@@ -22,7 +22,24 @@ export function normalizeState(state: StoredAppState): StoredAppState {
     scenarios: state.scenarios.map((scenario) => ({
       ...scenario,
       data: normalizeData(scenario.data),
+      annualPlan: normalizeAnnualPlan(scenario.annualPlan),
     })),
+  }
+}
+
+function normalizeAnnualPlan(plan: AnnualPlan | undefined): AnnualPlan | undefined {
+  if (!plan || !Number.isInteger(plan.year) || !plan.monthlyVolumes || typeof plan.monthlyVolumes !== 'object') return undefined
+  return {
+    ...plan,
+    monthlyVolumes: Object.fromEntries(
+      Object.entries(plan.monthlyVolumes).map(([plantId, values]) => [
+        plantId,
+        Array.from({ length: 12 }, (_, month) => {
+          const value = Array.isArray(values) ? Number(values[month]) : 0
+          return Number.isInteger(value) && value >= 0 ? value : 0
+        }),
+      ]),
+    ),
   }
 }
 

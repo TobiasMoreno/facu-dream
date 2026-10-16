@@ -38,6 +38,7 @@ import {
   YAxis,
 } from 'recharts'
 import type { LabelProps } from 'recharts'
+import AnnualView from './AnnualView'
 import { cloneInitialData, createInitialScenario } from './data/defaultScenario'
 import { CARRIER_TERMINAL_OPTIONS, TERMINALS, terminalScopeLabel, type Terminal, type TerminalScope } from './constants'
 import { optimizeTransport } from './lib/optimizer'
@@ -46,7 +47,7 @@ import { loadState, normalizeState, saveState } from './lib/storage'
 import { validateScenario } from './lib/validation'
 import type { Carrier, EffectiveAllocation, OptimizationResult, Plant, Scenario, ScenarioData, SeaRate, StoredAppState } from './types'
 
-type View = 'data' | 'result' | 'compare'
+type View = 'data' | 'result' | 'compare' | 'annual'
 
 const money = new Intl.NumberFormat('es-AR', { style: 'currency', currency: 'USD', minimumFractionDigits: 2 })
 const integer = new Intl.NumberFormat('es-AR', { maximumFractionDigits: 0 })
@@ -84,7 +85,13 @@ function App() {
       ...current,
       scenarios: current.scenarios.map((scenario) =>
         scenario.id === current.activeScenarioId
-          ? { ...scenario, data: updater(scenario.data), result: undefined, updatedAt: new Date().toISOString() }
+          ? {
+              ...scenario,
+              data: updater(scenario.data),
+              result: undefined,
+              annualPlan: scenario.annualPlan ? { ...scenario.annualPlan, results: undefined, optimizedAt: undefined } : undefined,
+              updatedAt: new Date().toISOString(),
+            }
           : scenario,
       ),
     }))
@@ -137,7 +144,7 @@ function App() {
   }
 
   const restoreExample = () => {
-    updateActive({ data: cloneInitialData(), result: undefined })
+    updateActive({ data: cloneInitialData(), result: undefined, annualPlan: undefined })
     setNotice('Se restauró el caso inicial.')
   }
 
@@ -202,6 +209,7 @@ function App() {
           <button className={view === 'data' ? 'nav-item active' : 'nav-item'} onClick={() => selectView('data')}>01 <span>Datos</span></button>
           <button className={view === 'result' ? 'nav-item active' : 'nav-item'} onClick={() => selectView('result')}>02 <span>Resultado</span></button>
           <button className={view === 'compare' ? 'nav-item active' : 'nav-item'} onClick={() => selectView('compare')}>03 <span>Comparar</span></button>
+          <button className={view === 'annual' ? 'nav-item active' : 'nav-item'} onClick={() => selectView('annual')}>04 <span>Anualizado</span></button>
         </nav>
         <button className="mobile-toggle" onClick={() => setMobileMenu((value) => !value)} aria-label="Abrir menú"><Menu /></button>
 
@@ -251,6 +259,7 @@ function App() {
         {view === 'data' && <DataView data={active.data} updateData={updateData} onOptimize={runOptimization} />}
         {view === 'result' && <ResultView result={active.result} data={active.data} optimizing={optimizing} onOptimize={runOptimization} />}
         {view === 'compare' && <CompareView scenario={active} onChange={(effectiveDistribution) => updateActive({ effectiveDistribution })} />}
+        {view === 'annual' && <AnnualView key={active.id} scenario={active} onChange={(annualPlan) => updateActive({ annualPlan })} />}
       </main>
 
       {notice && <div className="toast"><CheckCircle2 size={18} /> {notice}</div>}
@@ -386,6 +395,7 @@ function ValidationPanel({ errors }: { errors: string[] }) {
 }
 
 function ResultView({ result, data, optimizing, onOptimize }: { result?: OptimizationResult; data: ScenarioData; optimizing: boolean; onOptimize: () => void }) {
+  const [chartMeasure, setChartMeasure] = useState<'volume' | 'percentage'>('volume')
   const status = optimizing ? 'running' : result?.status ?? 'idle'
   const chartCarriers = data.carriers.filter((carrier, index, carriers) =>
     carriers.findIndex((item) => normalizeCarrierName(item.name) === normalizeCarrierName(carrier.name)) === index,
@@ -404,6 +414,14 @@ function ResultView({ result, data, optimizing, onOptimize }: { result?: Optimiz
     row.road = result?.allocations.find((item) => item.id === `road-${plant.id}`)?.quantity ?? 0
     row.total = transportMeans.reduce((sum, medium) => sum + Number(row[medium.key]), 0)
     return row
+  })
+  const displayedChartData = chartMeasure === 'volume' ? chartData : chartData.map((row) => {
+    const total = Number(row.total)
+    return {
+      ...row,
+      ...Object.fromEntries(transportMeans.map((medium) => [medium.key, total > 0 ? Number(row[medium.key]) / total * 100 : 0])),
+      total: 100,
+    }
   })
   const costData = result?.allocations.reduce<Array<{ name: string; value: number }>>((items, allocation) => {
     const found = items.find((item) => item.name === allocation.mode)
@@ -455,8 +473,8 @@ function ResultView({ result, data, optimizing, onOptimize }: { result?: Optimiz
           </section>
 
           <section className="panel chart-panel">
-            <SectionHeader number="04" icon={<BarChart3 />} title="Volumen por planta y medio" description="Cantidad y porcentaje que aporta cada naviera y el rodoviario sobre el total de cada planta." />
-            <ResponsiveContainer width="100%" height={280}><BarChart data={chartData} margin={{ top: 15, right: 10, left: -18, bottom: 0 }}><CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#d9d6cb" /><XAxis dataKey="name" tick={{ fill: '#53646a', fontSize: 12 }} axisLine={false} tickLine={false} /><YAxis tick={{ fill: '#53646a', fontSize: 12 }} axisLine={false} tickLine={false} /><Tooltip formatter={(value, name, item) => { const row = item.payload as Record<string, string | number>; return [`${integer.format(Number(value))} vehículos · ${formatPercentage(Number(value), Number(row.total))}`, String(name)] }} /><Legend />{transportMeans.map((medium, index) => <Bar key={medium.key} dataKey={medium.key} name={medium.label} stackId="transport" fill={medium.color} radius={index === transportMeans.length - 1 ? [4, 4, 0, 0] : undefined} label={{ content: renderTransportLabel(medium.key, chartData, medium.color === '#dcae49' ? '#112a33' : '#ffffff') }} />)}</BarChart></ResponsiveContainer>
+            <SectionHeader number="04" icon={<BarChart3 />} title="Volumen por planta y medio" description="Cantidad y porcentaje que aporta cada naviera y el rodoviario sobre el total de cada planta." action={<ChartMeasureSelect value={chartMeasure} onChange={setChartMeasure} />} />
+            <ResponsiveContainer width="100%" height={280}><BarChart data={displayedChartData} margin={{ top: 15, right: 10, left: -18, bottom: 0 }}><CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#d9d6cb" /><XAxis dataKey="name" tick={{ fill: '#53646a', fontSize: 12 }} axisLine={false} tickLine={false} /><YAxis domain={chartMeasure === 'percentage' ? [0, 100] : undefined} tickFormatter={chartMeasure === 'percentage' ? (value) => `${value}%` : undefined} tick={{ fill: '#53646a', fontSize: 12 }} axisLine={false} tickLine={false} /><Tooltip formatter={(value, name) => [chartMeasure === 'percentage' ? `${Number(value).toFixed(1)}%` : `${integer.format(Number(value))} vehículos`, String(name)]} /><Legend />{transportMeans.map((medium, index) => <Bar key={medium.key} dataKey={medium.key} name={medium.label} stackId="transport" fill={medium.color} radius={index === transportMeans.length - 1 ? [4, 4, 0, 0] : undefined} label={{ content: renderTransportLabel(medium.key, displayedChartData, medium.color === '#dcae49' ? '#112a33' : '#ffffff', chartMeasure) }} />)}</BarChart></ResponsiveContainer>
             <div className="transport-matrix-scroll">
               <div className="transport-matrix" style={{ gridTemplateColumns: `minmax(105px, 1.25fr) repeat(${transportMeans.length}, minmax(66px, 1fr)) minmax(70px, .8fr)` }}>
                 <div className="matrix-head">Planta</div>
@@ -489,6 +507,10 @@ function ResultView({ result, data, optimizing, onOptimize }: { result?: Optimiz
 
 function MetricCard({ icon, label, value, suffix, accent }: { icon: React.ReactNode; label: string; value: string; suffix?: string; accent?: boolean }) {
   return <div className={accent ? 'metric-card accent' : 'metric-card'}><span className="metric-icon">{icon}</span><span className="metric-label">{label}</span><strong>{value}</strong>{suffix && <small>{suffix}</small>}<i /></div>
+}
+
+function ChartMeasureSelect({ value, onChange }: { value: 'volume' | 'percentage'; onChange: (value: 'volume' | 'percentage') => void }) {
+  return <label className="chart-measure-select"><span>Mostrar</span><select aria-label="Mostrar gráfico como" value={value} onChange={(event) => onChange(event.target.value as 'volume' | 'percentage')}><option value="volume">Volumen</option><option value="percentage">Porcentaje</option></select><ChevronDown size={14} /></label>
 }
 
 function EmptyResult({ onOptimize }: { onOptimize: () => void }) {
@@ -586,13 +608,13 @@ const roadRuleLabel = (type: Plant['roadRule']['type']) => type === 'exact' ? 'e
 const normalizeCarrierName = (name: string) => name.trim().toLocaleLowerCase()
 const formatPercentage = (value: number, total: number) => percentage.format(total > 0 ? value / total : 0)
 
-function renderTransportLabel(key: string, rows: Array<Record<string, string | number>>, fill: string) {
+function renderTransportLabel(key: string, rows: Array<Record<string, string | number>>, fill: string, measure: 'volume' | 'percentage' = 'volume') {
   return ({ viewBox, index }: LabelProps) => {
     if (index === undefined || !viewBox || !('x' in viewBox) || viewBox.height < 25 || viewBox.width < 58) return <></>
     const value = Number(rows[index]?.[key] ?? 0)
     const total = Number(rows[index]?.total ?? 0)
     if (!value) return <></>
-    return <text x={viewBox.x + viewBox.width / 2} y={viewBox.y + viewBox.height / 2} fill={fill} textAnchor="middle" dominantBaseline="central" fontSize="9" fontWeight="700">{integer.format(value)} · {formatPercentage(value, total)}</text>
+    return <text x={viewBox.x + viewBox.width / 2} y={viewBox.y + viewBox.height / 2} fill={fill} textAnchor="middle" dominantBaseline="central" fontSize="9" fontWeight="700">{measure === 'percentage' ? `${value.toFixed(1)}%` : `${integer.format(value)} · ${formatPercentage(value, total)}`}</text>
   }
 }
 

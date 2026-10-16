@@ -3,7 +3,7 @@ import type { Allocation, OptimizationResult, ScenarioData } from '../types'
 import { terminalMatchesScope, terminalScopeLabel } from '../constants'
 import { diagnoseInfeasibility, validateScenario } from './validation'
 
-interface SolverLike {
+export interface SolverLike {
   GLP_MIN: number
   GLP_LO: number
   GLP_UP: number
