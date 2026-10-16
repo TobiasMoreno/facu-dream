@@ -10,6 +10,7 @@ import {
   CircleDollarSign,
   Copy,
   Download,
+  FileDown,
   FileJson,
   Gauge,
   Info,
@@ -67,6 +68,7 @@ function App() {
   const [renaming, setRenaming] = useState(false)
   const [mobileMenu, setMobileMenu] = useState(false)
   const [notice, setNotice] = useState<string | null>(null)
+  const [exportingPdf, setExportingPdf] = useState(false)
   const importRef = useRef<HTMLInputElement>(null)
   const active = state.scenarios.find((scenario) => scenario.id === state.activeScenarioId) ?? state.scenarios[0]
 
@@ -149,6 +151,21 @@ function App() {
     URL.revokeObjectURL(url)
   }
 
+  const exportPdf = async (allScenarios: boolean) => {
+    setExportingPdf(true)
+    try {
+      const { downloadScenariosPdf } = await import('./lib/pdfReport')
+      const selected = allScenarios ? state.scenarios : [active]
+      const scope = allScenarios ? 'todos-los-escenarios' : safeFilename(active.name)
+      await downloadScenariosPdf(selected, `ruta-optima-${scope}-${new Date().toISOString().slice(0, 10)}.pdf`)
+      setNotice(`PDF ${allScenarios ? 'general' : 'del escenario'} generado.`)
+    } catch (error) {
+      setNotice(error instanceof Error ? `No se pudo generar el PDF: ${error.message}` : 'No se pudo generar el PDF.')
+    } finally {
+      setExportingPdf(false)
+    }
+  }
+
   const importJson = async (file?: File) => {
     if (!file) return
     try {
@@ -225,6 +242,8 @@ function App() {
             <ActionButton icon={<RotateCcw />} label="Restaurar ejemplo" onClick={restoreExample} />
             <ActionButton icon={<Upload />} label="Importar" onClick={() => importRef.current?.click()} />
             <ActionButton icon={<Download />} label="Exportar" onClick={exportJson} />
+            <ActionButton icon={exportingPdf ? <LoaderCircle className="spin" /> : <FileDown />} label="PDF actual" onClick={() => void exportPdf(false)} disabled={exportingPdf} />
+            <ActionButton icon={exportingPdf ? <LoaderCircle className="spin" /> : <FileDown />} label="PDF todos" onClick={() => void exportPdf(true)} disabled={exportingPdf} />
             <input ref={importRef} hidden type="file" accept="application/json,.json" onChange={(event) => void importJson(event.target.files?.[0])} />
           </div>
         </section>
@@ -562,6 +581,7 @@ function allocationKey(item: OptimizationResult['allocations'][number]) {
 
 const numberValue = (value: string) => value === '' ? 0 : Number(value)
 const nullableNumber = (value: string) => value === '' ? null : Number(value)
+const safeFilename = (value: string) => value.trim().toLocaleLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '') || 'escenario'
 const roadRuleLabel = (type: Plant['roadRule']['type']) => type === 'exact' ? 'exactamente' : type === 'min' ? 'como mínimo' : 'como máximo'
 const normalizeCarrierName = (name: string) => name.trim().toLocaleLowerCase()
 const formatPercentage = (value: number, total: number) => percentage.format(total > 0 ? value / total : 0)
