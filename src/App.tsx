@@ -36,7 +36,9 @@ import {
   XAxis,
   YAxis,
 } from 'recharts'
+import type { LabelProps } from 'recharts'
 import { cloneInitialData, createInitialScenario } from './data/defaultScenario'
+import { TERMINALS, type Terminal } from './constants'
 import { optimizeTransport } from './lib/optimizer'
 import { loadState, normalizeState, saveState } from './lib/storage'
 import { validateScenario } from './lib/validation'
@@ -46,6 +48,7 @@ type View = 'data' | 'result' | 'compare'
 
 const money = new Intl.NumberFormat('es-AR', { style: 'currency', currency: 'USD', minimumFractionDigits: 2 })
 const integer = new Intl.NumberFormat('es-AR', { maximumFractionDigits: 0 })
+const percentage = new Intl.NumberFormat('es-AR', { style: 'percent', minimumFractionDigits: 1, maximumFractionDigits: 1 })
 const COLORS = ['#ef6a3a', '#2b7a78', '#dcae49', '#477998', '#88498f']
 const TRANSPORT_COLORS = ['#173e48', '#2b7a78', '#dcae49', '#477998', '#88498f', '#788b91']
 
@@ -276,7 +279,7 @@ function DataView({ data, updateData, onOptimize }: { data: ScenarioData; update
   const addRate = () => updateData((current) => ({
     ...current,
     seaRates: [...current.seaRates, {
-      id: crypto.randomUUID(), plantId: current.plants[0]?.id ?? '', carrierId: current.carriers[0]?.id ?? '', terminal: '', cost: 0, enabled: true,
+      id: crypto.randomUUID(), plantId: current.plants[0]?.id ?? '', carrierId: current.carriers[0]?.id ?? '', terminal: TERMINALS[0], cost: 0, enabled: true,
     }],
   }))
 
@@ -327,7 +330,7 @@ function DataView({ data, updateData, onOptimize }: { data: ScenarioData; update
               <td><label className="switch"><input type="checkbox" checked={rate.enabled} onChange={(event) => updateRate(rate.id, 'enabled', event.target.checked)} /><span /></label></td>
               <td><select value={rate.plantId} onChange={(event) => updateRate(rate.id, 'plantId', event.target.value)}>{data.plants.map((plant) => <option key={plant.id} value={plant.id}>{plant.name || 'Sin nombre'}</option>)}</select></td>
               <td><select value={rate.carrierId} onChange={(event) => updateRate(rate.id, 'carrierId', event.target.value)}>{data.carriers.map((carrier) => <option key={carrier.id} value={carrier.id}>{carrier.name || 'Sin nombre'}</option>)}</select></td>
-              <td><input value={rate.terminal} onChange={(event) => updateRate(rate.id, 'terminal', event.target.value)} /></td>
+              <td><select aria-label="Terminal marítima" value={rate.terminal} onChange={(event) => updateRate(rate.id, 'terminal', event.target.value)}>{!TERMINALS.includes(rate.terminal as Terminal) && <option value={rate.terminal} disabled>{rate.terminal} (no válida)</option>}{TERMINALS.map((terminal) => <option key={terminal} value={terminal}>{terminal}</option>)}</select></td>
               <td><div className="money-input"><span>$</span><input type="number" min="0" step="0.01" value={rate.cost} onChange={(event) => updateRate(rate.id, 'cost', numberValue(event.target.value))} /></div></td>
               <td className="cell-action"><button className="icon-button danger" onClick={() => updateData((current) => ({ ...current, seaRates: current.seaRates.filter((item) => item.id !== rate.id) }))} aria-label="Eliminar tarifa"><Trash2 size={17} /></button></td>
             </tr>)}</tbody>
@@ -375,6 +378,7 @@ function ResultView({ result, data, optimizing, onOptimize }: { result?: Optimiz
         .reduce((sum, item) => sum + item.quantity, 0) ?? 0
     })
     row.road = result?.allocations.find((item) => item.id === `road-${plant.id}`)?.quantity ?? 0
+    row.total = transportMeans.reduce((sum, medium) => sum + Number(row[medium.key]), 0)
     return row
   })
   const costData = result?.allocations.reduce<Array<{ name: string; value: number }>>((items, allocation) => {
@@ -427,8 +431,8 @@ function ResultView({ result, data, optimizing, onOptimize }: { result?: Optimiz
           </section>
 
           <section className="panel chart-panel">
-            <SectionHeader number="04" icon={<BarChart3 />} title="Volumen por planta y medio" description="Cuántos vehículos aporta cada naviera y el rodoviario en cada origen." />
-            <ResponsiveContainer width="100%" height={280}><BarChart data={chartData} margin={{ top: 15, right: 10, left: -18, bottom: 0 }}><CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#d9d6cb" /><XAxis dataKey="name" tick={{ fill: '#53646a', fontSize: 12 }} axisLine={false} tickLine={false} /><YAxis tick={{ fill: '#53646a', fontSize: 12 }} axisLine={false} tickLine={false} /><Tooltip formatter={(value, name) => [integer.format(Number(value)), String(name)]} /><Legend />{transportMeans.map((medium, index) => <Bar key={medium.key} dataKey={medium.key} name={medium.label} stackId="transport" fill={medium.color} radius={index === transportMeans.length - 1 ? [4, 4, 0, 0] : undefined} />)}</BarChart></ResponsiveContainer>
+            <SectionHeader number="04" icon={<BarChart3 />} title="Volumen por planta y medio" description="Cantidad y porcentaje que aporta cada naviera y el rodoviario sobre el total de cada planta." />
+            <ResponsiveContainer width="100%" height={280}><BarChart data={chartData} margin={{ top: 15, right: 10, left: -18, bottom: 0 }}><CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#d9d6cb" /><XAxis dataKey="name" tick={{ fill: '#53646a', fontSize: 12 }} axisLine={false} tickLine={false} /><YAxis tick={{ fill: '#53646a', fontSize: 12 }} axisLine={false} tickLine={false} /><Tooltip formatter={(value, name, item) => { const row = item.payload as Record<string, string | number>; return [`${integer.format(Number(value))} vehículos · ${formatPercentage(Number(value), Number(row.total))}`, String(name)] }} /><Legend />{transportMeans.map((medium, index) => <Bar key={medium.key} dataKey={medium.key} name={medium.label} stackId="transport" fill={medium.color} radius={index === transportMeans.length - 1 ? [4, 4, 0, 0] : undefined} label={{ content: renderTransportLabel(medium.key, chartData, medium.color === '#dcae49' ? '#112a33' : '#ffffff') }} />)}</BarChart></ResponsiveContainer>
             <div className="transport-matrix-scroll">
               <div className="transport-matrix" style={{ gridTemplateColumns: `minmax(105px, 1.25fr) repeat(${transportMeans.length}, minmax(66px, 1fr)) minmax(70px, .8fr)` }}>
                 <div className="matrix-head">Planta</div>
@@ -436,8 +440,8 @@ function ResultView({ result, data, optimizing, onOptimize }: { result?: Optimiz
                 <div className="matrix-head total-head">Total</div>
                 {chartData.flatMap((row) => [
                   <div className="matrix-plant" key={`${row.name}-name`}>{row.name}</div>,
-                  ...transportMeans.map((medium) => <div className="matrix-value" key={`${row.name}-${medium.key}`}>{integer.format(Number(row[medium.key]))}</div>),
-                  <div className="matrix-value matrix-total" key={`${row.name}-total`}>{integer.format(transportMeans.reduce((sum, medium) => sum + Number(row[medium.key]), 0))}</div>,
+                  ...transportMeans.map((medium) => <div className="matrix-value" key={`${row.name}-${medium.key}`}><strong>{integer.format(Number(row[medium.key]))}</strong><small>{formatPercentage(Number(row[medium.key]), Number(row.total))}</small></div>),
+                  <div className="matrix-value matrix-total" key={`${row.name}-total`}><strong>{integer.format(Number(row.total))}</strong><small>{formatPercentage(Number(row.total), Number(row.total))}</small></div>,
                 ])}
               </div>
             </div>
@@ -512,5 +516,16 @@ function allocationKey(item: OptimizationResult['allocations'][number]) {
 const numberValue = (value: string) => value === '' ? 0 : Number(value)
 const nullableNumber = (value: string) => value === '' ? null : Number(value)
 const roadRuleLabel = (type: Plant['roadRule']['type']) => type === 'exact' ? 'exactamente' : type === 'min' ? 'como mínimo' : 'como máximo'
+const formatPercentage = (value: number, total: number) => percentage.format(total > 0 ? value / total : 0)
+
+function renderTransportLabel(key: string, rows: Array<Record<string, string | number>>, fill: string) {
+  return ({ viewBox, index }: LabelProps) => {
+    if (index === undefined || !viewBox || !('x' in viewBox) || viewBox.height < 25 || viewBox.width < 58) return <></>
+    const value = Number(rows[index]?.[key] ?? 0)
+    const total = Number(rows[index]?.total ?? 0)
+    if (!value) return <></>
+    return <text x={viewBox.x + viewBox.width / 2} y={viewBox.y + viewBox.height / 2} fill={fill} textAnchor="middle" dominantBaseline="central" fontSize="9" fontWeight="700">{integer.format(value)} · {formatPercentage(value, total)}</text>
+  }
+}
 
 export default App

@@ -1,4 +1,5 @@
 import type { RoadRule, ScenarioData, StoredAppState } from '../types'
+import { normalizeTerminal } from '../constants'
 
 export const STORAGE_KEY = 'ruta-optima-state-v1'
 
@@ -33,6 +34,7 @@ function normalizeData(data: ScenarioData): ScenarioData {
       ...plant,
       roadRule: plant.roadRule ?? { type: 'min', quantity: 0 },
     })),
+    seaRates: data.seaRates.map((rate) => ({ ...rate, terminal: normalizeTerminal(rate.terminal) })),
     roadTotalRule: data.roadTotalRule ?? legacyTotalRule,
   }
 }

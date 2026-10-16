@@ -33,7 +33,7 @@ La suite confirma, entre otras cosas, que el caso inicial tiene un costo óptimo
 
 ## Uso
 
-1. En **Datos**, editá plantas, navieras, tarifas y la regla rodoviaria de cada planta. Cada origen puede exigir una cantidad exacta, mínima o máxima. Un campo de capacidad máxima de naviera vacío significa capacidad ilimitada.
+1. En **Datos**, editá plantas, navieras, tarifas y la regla rodoviaria de cada planta. Cada tarifa marítima usa una de las tres terminales admitidas: **Rio, Santos o Fiape**; cada combinación tiene su propio costo y compite independientemente en el optimizador. Cada origen puede exigir una cantidad rodoviaria exacta, mínima o máxima. Un campo de capacidad máxima de naviera vacío significa capacidad ilimitada.
 2. Deshabilitá un flujo con su interruptor si no debe participar.
 3. En **Resultado**, presioná **Optimizar**. Los errores de datos y las causas detectables de inviabilidad se presentan por separado.
 4. Creá, duplicá, renombrá o eliminá escenarios desde la barra superior. Cada cambio se guarda automáticamente en `localStorage`.

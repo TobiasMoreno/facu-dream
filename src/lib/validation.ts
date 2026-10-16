@@ -1,4 +1,5 @@
 import type { ScenarioData } from '../types'
+import { TERMINALS, type Terminal } from '../constants'
 
 const isFiniteNonNegative = (value: number) => Number.isFinite(value) && value >= 0
 
@@ -51,7 +52,9 @@ export function validateScenario(data: ScenarioData): string[] {
     const carrier = data.carriers.find((item) => item.id === rate.carrierId)
     if (!plant) errors.push(`La tarifa ${index + 1} referencia una planta inexistente.`)
     if (!carrier) errors.push(`La tarifa ${index + 1} referencia una naviera inexistente.`)
-    if (!rate.terminal.trim()) errors.push(`La tarifa ${index + 1} no tiene terminal.`)
+    if (!TERMINALS.includes(rate.terminal as Terminal)) {
+      errors.push(`La terminal de la tarifa ${index + 1} debe ser Rio, Santos o Fiape.`)
+    }
     if (!isFiniteNonNegative(rate.cost)) errors.push(`El costo de la tarifa ${index + 1} debe ser no negativo.`)
     const key = `${rate.plantId}|${rate.carrierId}|${rate.terminal.trim().toLocaleLowerCase()}`
     combinations.set(key, (combinations.get(key) ?? 0) + 1)

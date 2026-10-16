@@ -62,6 +62,19 @@ describe('optimizeTransport', () => {
     expect(result.roadByPlant.find((item) => item.plantId === 'porto-real')?.quantity).toBe(100)
   })
 
+  it('compara independientemente los costos de cada terminal', async () => {
+    const data = cloneInitialData()
+    const fiape = data.seaRates.find((rate) => rate.plantId === 'porto-real' && rate.carrierId === 'nyk' && rate.terminal === 'Fiape')
+    expect(fiape).toBeDefined()
+    fiape!.cost = 1
+
+    const result = await optimizeTransport(data, solver)
+
+    expect(result.status).toBe('optimal')
+    const allocation = result.allocations.find((item) => item.id === fiape!.id)
+    expect(allocation?.quantity).toBe(800)
+  })
+
   it('informa inviabilidad sin relajar restricciones', async () => {
     const data = cloneInitialData()
     data.carriers = data.carriers.map((carrier) => ({ ...carrier, max: 100 }))
