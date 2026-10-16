@@ -1,5 +1,5 @@
 import type { ScenarioData } from '../types'
-import { CARRIER_TERMINAL_OPTIONS, TERMINALS, type Terminal, type TerminalScope } from '../constants'
+import { CARRIER_TERMINAL_OPTIONS, TERMINALS, terminalMatchesScope, terminalScopeLabel, type Terminal } from '../constants'
 
 const isFiniteNonNegative = (value: number) => Number.isFinite(value) && value >= 0
 
@@ -32,7 +32,7 @@ export function validateScenario(data: ScenarioData): string[] {
   data.carriers.forEach((carrier, index) => {
     if (!carrier.name.trim()) errors.push(`La naviera ${index + 1} no tiene nombre.`)
     if (!CARRIER_TERMINAL_OPTIONS.some((option) => option.value === carrier.terminalScope)) {
-      errors.push(`La terminal de ${carrier.name || `naviera ${index + 1}`} debe ser Rio, Santos, Fiape o Todas.`)
+      errors.push(`La terminal de ${carrier.name || `naviera ${index + 1}`} debe ser Rio, Santos, Fiape, Rio/Santos o Todas.`)
     }
     if (!Number.isInteger(carrier.min) || !isFiniteNonNegative(carrier.min)) {
       errors.push(`El mínimo de ${carrier.name || `naviera ${index + 1}`} debe ser un entero no negativo.`)
@@ -112,13 +112,13 @@ export function diagnoseInfeasibility(data: ScenarioData): string[] {
 
   data.carriers.forEach((carrier) => {
     const reachable = data.plants
-      .filter((plant) => data.seaRates.some((rate) => rate.enabled && rate.plantId === plant.id && rate.carrierId === carrier.id && carrierIncludesTerminal(carrier.terminalScope, rate.terminal)))
+      .filter((plant) => data.seaRates.some((rate) => rate.enabled && rate.plantId === plant.id && rate.carrierId === carrier.id && terminalMatchesScope(carrier.terminalScope, rate.terminal)))
       .reduce((sum, plant) => {
         const roadLower = plant.roadRule.type === 'min' || plant.roadRule.type === 'exact' ? plant.roadRule.quantity : 0
         return sum + Math.max(0, plant.volume - roadLower)
       }, 0)
     if (carrier.min > reachable) {
-      const terminal = carrier.terminalScope === 'all' ? 'todas las terminales' : `terminal ${carrier.terminalScope}`
+      const terminal = carrier.terminalScope === 'all' ? 'todas las terminales' : `terminal ${terminalScopeLabel(carrier.terminalScope)}`
       reasons.push(`${carrier.name} exige un mínimo de ${carrier.min} en ${terminal}, pero sus flujos habilitados solo alcanzan ${reachable} vehículos.`)
     }
   })
@@ -137,6 +137,3 @@ export function diagnoseInfeasibility(data: ScenarioData): string[] {
   return reasons
 }
 
-function carrierIncludesTerminal(scope: TerminalScope, terminal: string) {
-  return scope === 'all' || scope === terminal
-}

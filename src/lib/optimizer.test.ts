@@ -93,6 +93,27 @@ describe('optimizeTransport', () => {
     expect(summary?.quantity).toBe(kLineFiape)
   })
 
+  it('agrupa Rio y Santos en un único compromiso combinado', async () => {
+    const data = cloneInitialData()
+    data.carriers = data.carriers.map((carrier) => carrier.id === 'k-line'
+      ? { ...carrier, terminalScope: 'rio-santos', min: 100 }
+      : carrier)
+    data.seaRates = data.seaRates.map((rate) => rate.carrierId === 'k-line' && rate.terminal === 'Fiape'
+      ? { ...rate, cost: 1 }
+      : rate)
+
+    const result = await optimizeTransport(data, solver)
+
+    expect(result.status).toBe('optimal')
+    const kLineRioSantos = result.allocations
+      .filter((item) => item.carrierId === 'k-line' && (item.terminal === 'Rio' || item.terminal === 'Santos'))
+      .reduce((sum, item) => sum + item.quantity, 0)
+    const summary = result.carrierSummaries.find((item) => item.carrierId === 'k-line')
+    expect(kLineRioSantos).toBeGreaterThanOrEqual(100)
+    expect(summary?.terminalScope).toBe('rio-santos')
+    expect(summary?.quantity).toBe(kLineRioSantos)
+  })
+
   it('informa inviabilidad sin relajar restricciones', async () => {
     const data = cloneInitialData()
     data.carriers = data.carriers.map((carrier) => ({ ...carrier, max: 100 }))

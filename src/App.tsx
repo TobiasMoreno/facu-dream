@@ -38,7 +38,7 @@ import {
 } from 'recharts'
 import type { LabelProps } from 'recharts'
 import { cloneInitialData, createInitialScenario } from './data/defaultScenario'
-import { CARRIER_TERMINAL_OPTIONS, TERMINALS, type Terminal, type TerminalScope } from './constants'
+import { CARRIER_TERMINAL_OPTIONS, TERMINALS, terminalScopeLabel, type Terminal, type TerminalScope } from './constants'
 import { optimizeTransport } from './lib/optimizer'
 import { loadState, normalizeState, saveState } from './lib/storage'
 import { validateScenario } from './lib/validation'
@@ -419,7 +419,7 @@ function ResultView({ result, data, optimizing, onOptimize }: { result?: Optimiz
 
           <section className="panel">
             <SectionHeader number="02" icon={<Ship />} title="Control por naviera" description="Cumplimiento de compromisos y capacidades." />
-            <div className="carrier-list">{result.carrierSummaries.map((carrier) => <div className="carrier-row" key={carrier.carrierId}><div><strong>{carrier.carrier}</strong><span>{integer.format(carrier.quantity)} vehículos · {carrier.terminalScope === 'all' || !carrier.terminalScope ? 'Todas' : carrier.terminalScope}</span></div><div className="capacity-track"><i style={{ width: carrier.max ? `${Math.min(100, carrier.quantity / carrier.max * 100)}%` : carrier.quantity ? '72%' : '0%' }} /></div><div className="constraint-tags"><span className={carrier.minMet ? 'ok' : 'bad'}><Check size={13} /> Mín. {integer.format(carrier.min)}</span><span className={carrier.maxMet ? 'ok' : 'bad'}><Check size={13} /> Máx. {carrier.max === null ? '∞' : integer.format(carrier.max)}</span></div></div>)}</div>
+            <div className="carrier-list">{result.carrierSummaries.map((carrier) => <div className="carrier-row" key={carrier.carrierId}><div><strong>{carrier.carrier}</strong><span>{integer.format(carrier.quantity)} vehículos · {terminalScopeLabel(carrier.terminalScope)}</span></div><div className="capacity-track"><i style={{ width: carrier.max ? `${Math.min(100, carrier.quantity / carrier.max * 100)}%` : carrier.quantity ? '72%' : '0%' }} /></div><div className="constraint-tags"><span className={carrier.minMet ? 'ok' : 'bad'}><Check size={13} /> Mín. {integer.format(carrier.min)}</span><span className={carrier.maxMet ? 'ok' : 'bad'}><Check size={13} /> Máx. {carrier.max === null ? '∞' : integer.format(carrier.max)}</span></div></div>)}</div>
           </section>
 
           <section className="panel">
