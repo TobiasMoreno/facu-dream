@@ -330,7 +330,7 @@ function DataView({ data, updateData, onOptimize }: { data: ScenarioData; update
             <tbody>{data.seaRates.map((rate) => <tr key={rate.id} className={rate.enabled ? '' : 'disabled-row'}>
               <td><label className="switch"><input type="checkbox" checked={rate.enabled} onChange={(event) => updateRate(rate.id, 'enabled', event.target.checked)} /><span /></label></td>
               <td><select value={rate.plantId} onChange={(event) => updateRate(rate.id, 'plantId', event.target.value)}>{data.plants.map((plant) => <option key={plant.id} value={plant.id}>{plant.name || 'Sin nombre'}</option>)}</select></td>
-              <td><select value={rate.carrierId} onChange={(event) => updateRate(rate.id, 'carrierId', event.target.value)}>{data.carriers.map((carrier) => <option key={carrier.id} value={carrier.id}>{carrier.name || 'Sin nombre'}</option>)}</select></td>
+              <td><select value={rate.carrierId} onChange={(event) => updateRate(rate.id, 'carrierId', event.target.value)}>{data.carriers.map((carrier) => <option key={carrier.id} value={carrier.id}>{carrier.name || 'Sin nombre'} · {terminalScopeLabel(carrier.terminalScope)}</option>)}</select></td>
               <td><select aria-label="Terminal marítima" value={rate.terminal} onChange={(event) => updateRate(rate.id, 'terminal', event.target.value)}>{!TERMINALS.includes(rate.terminal as Terminal) && <option value={rate.terminal} disabled>{rate.terminal} (no válida)</option>}{TERMINALS.map((terminal) => <option key={terminal} value={terminal}>{terminal}</option>)}</select></td>
               <td><div className="money-input"><span>$</span><input type="number" min="0" step="0.01" value={rate.cost} onChange={(event) => updateRate(rate.id, 'cost', numberValue(event.target.value))} /></div></td>
               <td className="cell-action"><button className="icon-button danger" onClick={() => updateData((current) => ({ ...current, seaRates: current.seaRates.filter((item) => item.id !== rate.id) }))} aria-label="Eliminar tarifa"><Trash2 size={17} /></button></td>
@@ -367,15 +367,18 @@ function ValidationPanel({ errors }: { errors: string[] }) {
 
 function ResultView({ result, data, optimizing, onOptimize }: { result?: OptimizationResult; data: ScenarioData; optimizing: boolean; onOptimize: () => void }) {
   const status = optimizing ? 'running' : result?.status ?? 'idle'
+  const chartCarriers = data.carriers.filter((carrier, index, carriers) =>
+    carriers.findIndex((item) => normalizeCarrierName(item.name) === normalizeCarrierName(carrier.name)) === index,
+  )
   const transportMeans = [
-    ...data.carriers.map((carrier, index) => ({ key: `carrier_${carrier.id}`, label: carrier.name, color: TRANSPORT_COLORS[index % TRANSPORT_COLORS.length], carrierId: carrier.id })),
-    { key: 'road', label: 'Rodoviario', color: '#ef6a3a', carrierId: undefined },
+    ...chartCarriers.map((carrier, index) => ({ key: `carrier_${carrier.id}`, label: carrier.name, color: TRANSPORT_COLORS[index % TRANSPORT_COLORS.length], carrierName: carrier.name })),
+    { key: 'road', label: 'Rodoviario', color: '#ef6a3a', carrierName: undefined },
   ]
   const chartData = data.plants.map((plant) => {
     const row: Record<string, string | number> = { name: plant.name }
-    data.carriers.forEach((carrier) => {
+    chartCarriers.forEach((carrier) => {
       row[`carrier_${carrier.id}`] = result?.allocations
-        .filter((item) => item.plantId === plant.id && item.carrierId === carrier.id)
+        .filter((item) => item.plantId === plant.id && normalizeCarrierName(item.carrier ?? '') === normalizeCarrierName(carrier.name))
         .reduce((sum, item) => sum + item.quantity, 0) ?? 0
     })
     row.road = result?.allocations.find((item) => item.id === `road-${plant.id}`)?.quantity ?? 0
@@ -517,6 +520,7 @@ function allocationKey(item: OptimizationResult['allocations'][number]) {
 const numberValue = (value: string) => value === '' ? 0 : Number(value)
 const nullableNumber = (value: string) => value === '' ? null : Number(value)
 const roadRuleLabel = (type: Plant['roadRule']['type']) => type === 'exact' ? 'exactamente' : type === 'min' ? 'como mínimo' : 'como máximo'
+const normalizeCarrierName = (name: string) => name.trim().toLocaleLowerCase()
 const formatPercentage = (value: number, total: number) => percentage.format(total > 0 ? value / total : 0)
 
 function renderTransportLabel(key: string, rows: Array<Record<string, string | number>>, fill: string) {

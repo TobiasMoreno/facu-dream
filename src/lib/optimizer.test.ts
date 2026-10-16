@@ -114,6 +114,21 @@ describe('optimizeTransport', () => {
     expect(summary?.quantity).toBe(kLineRioSantos)
   })
 
+  it('permite repetir una naviera cuando sus compromisos corresponden a terminales distintas', async () => {
+    const data = cloneInitialData()
+    data.carriers = [
+      ...data.carriers.map((carrier) => carrier.id === 'grimaldi' ? { ...carrier, terminalScope: 'Rio' as const } : carrier),
+      { id: 'grimaldi-santos', name: 'Grimaldi', terminalScope: 'Santos', min: 1, max: 500 },
+    ]
+
+    const result = await optimizeTransport(data, solver)
+
+    expect(result.status).toBe('optimal')
+    const santosCommitment = result.carrierSummaries.find((item) => item.carrierId === 'grimaldi-santos')
+    expect(santosCommitment?.quantity).toBeGreaterThanOrEqual(1)
+    expect(santosCommitment?.terminalScope).toBe('Santos')
+  })
+
   it('informa inviabilidad sin relajar restricciones', async () => {
     const data = cloneInitialData()
     data.carriers = data.carriers.map((carrier) => ({ ...carrier, max: 100 }))

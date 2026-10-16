@@ -45,9 +45,17 @@ export function validateScenario(data: ScenarioData): string[] {
     }
   })
 
-  duplicateNames(data.carriers.map((carrier) => carrier.name.trim()).filter(Boolean)).forEach((name) =>
-    errors.push(`La naviera “${name}” está duplicada.`),
-  )
+  const carrierCommitments = new Map<string, number>()
+  data.carriers.forEach((carrier) => {
+    if (!carrier.name.trim()) return
+    const key = `${carrier.name.trim().toLocaleLowerCase()}|${carrier.terminalScope}`
+    carrierCommitments.set(key, (carrierCommitments.get(key) ?? 0) + 1)
+  })
+  carrierCommitments.forEach((count, key) => {
+    if (count <= 1) return
+    const [name, scope] = key.split('|')
+    errors.push(`La combinación de naviera “${name}” y terminal “${terminalScopeLabel(scope as ScenarioData['carriers'][number]['terminalScope'])}” está duplicada.`)
+  })
 
   const combinations = new Map<string, number>()
   data.seaRates.forEach((rate, index) => {
@@ -59,7 +67,8 @@ export function validateScenario(data: ScenarioData): string[] {
       errors.push(`La terminal de la tarifa ${index + 1} debe ser Rio, Santos o Fiape.`)
     }
     if (!isFiniteNonNegative(rate.cost)) errors.push(`El costo de la tarifa ${index + 1} debe ser no negativo.`)
-    const key = `${rate.plantId}|${rate.carrierId}|${rate.terminal.trim().toLocaleLowerCase()}`
+    const carrierName = carrier?.name.trim().toLocaleLowerCase() ?? rate.carrierId
+    const key = `${rate.plantId}|${carrierName}|${rate.terminal.trim().toLocaleLowerCase()}`
     combinations.set(key, (combinations.get(key) ?? 0) + 1)
   })
   combinations.forEach((count) => {
@@ -112,7 +121,10 @@ export function diagnoseInfeasibility(data: ScenarioData): string[] {
 
   data.carriers.forEach((carrier) => {
     const reachable = data.plants
-      .filter((plant) => data.seaRates.some((rate) => rate.enabled && rate.plantId === plant.id && rate.carrierId === carrier.id && terminalMatchesScope(carrier.terminalScope, rate.terminal)))
+      .filter((plant) => data.seaRates.some((rate) => {
+        const rateCarrier = data.carriers.find((item) => item.id === rate.carrierId)
+        return rate.enabled && rate.plantId === plant.id && sameCarrierName(rateCarrier?.name, carrier.name) && terminalMatchesScope(carrier.terminalScope, rate.terminal)
+      }))
       .reduce((sum, plant) => {
         const roadLower = plant.roadRule.type === 'min' || plant.roadRule.type === 'exact' ? plant.roadRule.quantity : 0
         return sum + Math.max(0, plant.volume - roadLower)
@@ -135,5 +147,9 @@ export function diagnoseInfeasibility(data: ScenarioData): string[] {
     reasons.push('La combinación de capacidades, mínimos, flujos habilitados y regla rodoviaria no admite una asignación completa.')
   }
   return reasons
+}
+
+function sameCarrierName(left: string | undefined, right: string) {
+  return left?.trim().toLocaleLowerCase() === right.trim().toLocaleLowerCase()
 }
 

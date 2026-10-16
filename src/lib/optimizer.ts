@@ -42,7 +42,10 @@ export async function optimizeTransport(data: ScenarioData, suppliedSolver?: Sol
 
     data.carriers.forEach((carrier) => {
       const vars = enabledRates
-        .filter((rate) => rate.carrierId === carrier.id && terminalMatchesScope(carrier.terminalScope, rate.terminal))
+        .filter((rate) => {
+          const rateCarrier = data.carriers.find((item) => item.id === rate.carrierId)
+          return sameCarrierName(rateCarrier?.name, carrier.name) && terminalMatchesScope(carrier.terminalScope, rate.terminal)
+        })
         .map((rate) => ({ name: seaVar(rate.id), coef: 1 }))
       if (carrier.min > 0) {
         subjectTo.push({
@@ -127,7 +130,7 @@ export async function optimizeTransport(data: ScenarioData, suppliedSolver?: Sol
     const totalCost = allocations.reduce((sum, allocation) => sum + allocation.totalCost, 0)
     const carrierSummaries = data.carriers.map((carrier) => {
       const quantity = allocations
-        .filter((allocation) => allocation.carrierId === carrier.id && terminalMatchesScope(carrier.terminalScope, allocation.terminal))
+        .filter((allocation) => sameCarrierName(allocation.carrier, carrier.name) && terminalMatchesScope(carrier.terminalScope, allocation.terminal))
         .reduce((sum, allocation) => sum + allocation.quantity, 0)
       return {
         carrierId: carrier.id,
@@ -191,6 +194,10 @@ function ruleBounds(type: ScenarioData['plants'][number]['roadRule']['type'], qu
     : type === 'min'
       ? { type: solver.GLP_LO, lb: quantity, ub: 0 }
       : { type: solver.GLP_UP, lb: 0, ub: quantity }
+}
+
+function sameCarrierName(left: string | undefined, right: string) {
+  return left?.trim().toLocaleLowerCase() === right.trim().toLocaleLowerCase()
 }
 
 function formatMoney(value: number) {
