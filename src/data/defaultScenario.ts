@@ -8,9 +8,9 @@ export const initialData: ScenarioData = {
     { id: 'fiasa', name: 'FIASA', volume: 1000, roadCost: 680, roadRule: { type: 'exact', quantity: 500 } },
   ],
   carriers: [
-    { id: 'grimaldi', name: 'Grimaldi', min: 0, max: 500 },
-    { id: 'nyk', name: 'NYK', min: 0, max: 800 },
-    { id: 'k-line', name: 'K-Line', min: 100, max: null },
+    { id: 'grimaldi', name: 'Grimaldi', terminalScope: 'all', min: 0, max: 500 },
+    { id: 'nyk', name: 'NYK', terminalScope: 'all', min: 0, max: 800 },
+    { id: 'k-line', name: 'K-Line', terminalScope: 'all', min: 100, max: null },
   ],
   seaRates: [
     ['Porto Real', 'NYK', 'Rio', 535],

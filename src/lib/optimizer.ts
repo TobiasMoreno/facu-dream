@@ -1,5 +1,6 @@
 import type { LP, Result } from 'glpk.js'
 import type { Allocation, OptimizationResult, ScenarioData } from '../types'
+import type { TerminalScope } from '../constants'
 import { diagnoseInfeasibility, validateScenario } from './validation'
 
 interface SolverLike {
@@ -40,7 +41,9 @@ export async function optimizeTransport(data: ScenarioData, suppliedSolver?: Sol
     }))
 
     data.carriers.forEach((carrier) => {
-      const vars = enabledRates.filter((rate) => rate.carrierId === carrier.id).map((rate) => ({ name: seaVar(rate.id), coef: 1 }))
+      const vars = enabledRates
+        .filter((rate) => rate.carrierId === carrier.id && carrierIncludesTerminal(carrier.terminalScope, rate.terminal))
+        .map((rate) => ({ name: seaVar(rate.id), coef: 1 }))
       if (carrier.min > 0) {
         subjectTo.push({
           name: `carrier_min_${carrier.id}`,
@@ -124,11 +127,12 @@ export async function optimizeTransport(data: ScenarioData, suppliedSolver?: Sol
     const totalCost = allocations.reduce((sum, allocation) => sum + allocation.totalCost, 0)
     const carrierSummaries = data.carriers.map((carrier) => {
       const quantity = allocations
-        .filter((allocation) => allocation.carrierId === carrier.id)
+        .filter((allocation) => allocation.carrierId === carrier.id && carrierIncludesTerminal(carrier.terminalScope, allocation.terminal))
         .reduce((sum, allocation) => sum + allocation.quantity, 0)
       return {
         carrierId: carrier.id,
         carrier: carrier.name,
+        terminalScope: carrier.terminalScope,
         quantity,
         min: carrier.min,
         max: carrier.max,
@@ -168,7 +172,7 @@ function buildExplanation(data: ScenarioData, allocations: Allocation[]): string
     messages.push(`Se aprovechó primero el flujo competitivo ${cheapest.plant} / ${cheapest.carrier} / ${cheapest.terminal} (${formatMoney(cheapest.unitCost)} por vehículo), sujeto a las capacidades globales.`)
   }
   const constrained = data.carriers.filter((carrier) => carrier.min > 0)
-  if (constrained.length) messages.push(`Se respetaron los mínimos obligatorios de ${constrained.map((carrier) => carrier.name).join(', ')}.`)
+  if (constrained.length) messages.push(`Se respetaron los mínimos obligatorios de ${constrained.map((carrier) => `${carrier.name} (${carrier.terminalScope === 'all' ? 'todas las terminales' : carrier.terminalScope})`).join(', ')}.`)
   const roadRules = data.plants.map((plant) => {
     const roadLabel = plant.roadRule.type === 'exact' ? 'exactamente' : plant.roadRule.type === 'min' ? 'como mínimo' : 'como máximo'
     return `${plant.name}: ${roadLabel} ${plant.roadRule.quantity}`
@@ -179,6 +183,10 @@ function buildExplanation(data: ScenarioData, allocations: Allocation[]): string
     messages.push(`También se conservó la restricción total heredada: ${totalLabel} ${data.roadTotalRule.quantity} rodoviarios.`)
   }
   return messages
+}
+
+function carrierIncludesTerminal(scope: TerminalScope, terminal: string) {
+  return scope === 'all' || scope === terminal
 }
 
 function ruleBounds(type: ScenarioData['plants'][number]['roadRule']['type'], quantity: number, solver: SolverLike) {

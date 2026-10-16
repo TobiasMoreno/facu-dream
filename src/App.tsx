@@ -38,7 +38,7 @@ import {
 } from 'recharts'
 import type { LabelProps } from 'recharts'
 import { cloneInitialData, createInitialScenario } from './data/defaultScenario'
-import { TERMINALS, type Terminal } from './constants'
+import { CARRIER_TERMINAL_OPTIONS, TERMINALS, type Terminal, type TerminalScope } from './constants'
 import { optimizeTransport } from './lib/optimizer'
 import { loadState, normalizeState, saveState } from './lib/storage'
 import { validateScenario } from './lib/validation'
@@ -258,7 +258,7 @@ function DataView({ data, updateData, onOptimize }: { data: ScenarioData; update
   const validation = useMemo(() => validateScenario(data), [data])
   const updatePlant = (id: string, field: keyof Plant, value: Plant[keyof Plant]) =>
     updateData((current) => ({ ...current, plants: current.plants.map((plant) => plant.id === id ? { ...plant, [field]: value } : plant) }))
-  const updateCarrier = (id: string, field: keyof Carrier, value: string | number | null) =>
+  const updateCarrier = (id: string, field: keyof Carrier, value: Carrier[keyof Carrier]) =>
     updateData((current) => ({ ...current, carriers: current.carriers.map((carrier) => carrier.id === id ? { ...carrier, [field]: value } : carrier) }))
   const updateRate = (id: string, field: keyof SeaRate, value: string | number | boolean) =>
     updateData((current) => ({ ...current, seaRates: current.seaRates.map((rate) => rate.id === id ? { ...rate, [field]: value } : rate) }))
@@ -275,7 +275,7 @@ function DataView({ data, updateData, onOptimize }: { data: ScenarioData; update
   }))
 
   const addPlant = () => updateData((current) => ({ ...current, plants: [...current.plants, { id: crypto.randomUUID(), name: '', volume: 0, roadCost: 0, roadRule: { type: 'exact', quantity: 0 } }] }))
-  const addCarrier = () => updateData((current) => ({ ...current, carriers: [...current.carriers, { id: crypto.randomUUID(), name: '', min: 0, max: null }] }))
+  const addCarrier = () => updateData((current) => ({ ...current, carriers: [...current.carriers, { id: crypto.randomUUID(), name: '', terminalScope: 'all', min: 0, max: null }] }))
   const addRate = () => updateData((current) => ({
     ...current,
     seaRates: [...current.seaRates, {
@@ -309,10 +309,11 @@ function DataView({ data, updateData, onOptimize }: { data: ScenarioData; update
       <section className="panel">
         <SectionHeader number="02" icon={<Ship />} title="Navieras y compromisos" description="La capacidad vacía se interpreta como ilimitada. Los mínimos son obligatorios." action={<button className="button-secondary" onClick={addCarrier}><Plus size={17} /> Agregar naviera</button>} />
         <div className="table-scroll">
-          <table className="data-table">
-            <thead><tr><th>Naviera</th><th>Mínimo obligatorio</th><th>Capacidad máxima</th><th aria-label="Acciones" /></tr></thead>
+          <table className="data-table carrier-data-table">
+            <thead><tr><th>Naviera</th><th>Terminal</th><th>Mínimo obligatorio</th><th>Capacidad máxima</th><th aria-label="Acciones" /></tr></thead>
             <tbody>{data.carriers.map((carrier) => <tr key={carrier.id}>
               <td><input value={carrier.name} aria-label="Nombre de naviera" onChange={(event) => updateCarrier(carrier.id, 'name', event.target.value)} /></td>
+              <td><select aria-label={`Terminal del compromiso de ${carrier.name}`} value={carrier.terminalScope} onChange={(event) => updateCarrier(carrier.id, 'terminalScope', event.target.value as TerminalScope)}>{CARRIER_TERMINAL_OPTIONS.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}</select></td>
               <td><input className="number-input" type="number" min="0" step="1" value={carrier.min} onChange={(event) => updateCarrier(carrier.id, 'min', numberValue(event.target.value))} /></td>
               <td><input className="number-input" type="number" min="0" step="1" placeholder="Ilimitada" value={carrier.max ?? ''} onChange={(event) => updateCarrier(carrier.id, 'max', nullableNumber(event.target.value))} /></td>
               <td className="cell-action"><button className="icon-button danger" onClick={() => removeCarrier(carrier.id)} aria-label={`Eliminar ${carrier.name}`}><Trash2 size={17} /></button></td>
@@ -418,7 +419,7 @@ function ResultView({ result, data, optimizing, onOptimize }: { result?: Optimiz
 
           <section className="panel">
             <SectionHeader number="02" icon={<Ship />} title="Control por naviera" description="Cumplimiento de compromisos y capacidades." />
-            <div className="carrier-list">{result.carrierSummaries.map((carrier) => <div className="carrier-row" key={carrier.carrierId}><div><strong>{carrier.carrier}</strong><span>{integer.format(carrier.quantity)} vehículos</span></div><div className="capacity-track"><i style={{ width: carrier.max ? `${Math.min(100, carrier.quantity / carrier.max * 100)}%` : carrier.quantity ? '72%' : '0%' }} /></div><div className="constraint-tags"><span className={carrier.minMet ? 'ok' : 'bad'}><Check size={13} /> Mín. {integer.format(carrier.min)}</span><span className={carrier.maxMet ? 'ok' : 'bad'}><Check size={13} /> Máx. {carrier.max === null ? '∞' : integer.format(carrier.max)}</span></div></div>)}</div>
+            <div className="carrier-list">{result.carrierSummaries.map((carrier) => <div className="carrier-row" key={carrier.carrierId}><div><strong>{carrier.carrier}</strong><span>{integer.format(carrier.quantity)} vehículos · {carrier.terminalScope === 'all' || !carrier.terminalScope ? 'Todas' : carrier.terminalScope}</span></div><div className="capacity-track"><i style={{ width: carrier.max ? `${Math.min(100, carrier.quantity / carrier.max * 100)}%` : carrier.quantity ? '72%' : '0%' }} /></div><div className="constraint-tags"><span className={carrier.minMet ? 'ok' : 'bad'}><Check size={13} /> Mín. {integer.format(carrier.min)}</span><span className={carrier.maxMet ? 'ok' : 'bad'}><Check size={13} /> Máx. {carrier.max === null ? '∞' : integer.format(carrier.max)}</span></div></div>)}</div>
           </section>
 
           <section className="panel">

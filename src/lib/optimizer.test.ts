@@ -75,6 +75,24 @@ describe('optimizeTransport', () => {
     expect(allocation?.quantity).toBe(800)
   })
 
+  it('aplica el compromiso de una naviera solo a la terminal seleccionada', async () => {
+    const data = cloneInitialData()
+    data.carriers = data.carriers.map((carrier) => carrier.id === 'k-line'
+      ? { ...carrier, terminalScope: 'Fiape', min: 100 }
+      : carrier)
+
+    const result = await optimizeTransport(data, solver)
+
+    expect(result.status).toBe('optimal')
+    const kLineFiape = result.allocations
+      .filter((item) => item.carrierId === 'k-line' && item.terminal === 'Fiape')
+      .reduce((sum, item) => sum + item.quantity, 0)
+    const summary = result.carrierSummaries.find((item) => item.carrierId === 'k-line')
+    expect(kLineFiape).toBeGreaterThanOrEqual(100)
+    expect(summary?.terminalScope).toBe('Fiape')
+    expect(summary?.quantity).toBe(kLineFiape)
+  })
+
   it('informa inviabilidad sin relajar restricciones', async () => {
     const data = cloneInitialData()
     data.carriers = data.carriers.map((carrier) => ({ ...carrier, max: 100 }))

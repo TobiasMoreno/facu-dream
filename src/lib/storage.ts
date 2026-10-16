@@ -1,5 +1,6 @@
 import type { RoadRule, ScenarioData, StoredAppState } from '../types'
 import { normalizeTerminal } from '../constants'
+import type { TerminalScope } from '../constants'
 
 export const STORAGE_KEY = 'ruta-optima-state-v1'
 
@@ -34,9 +35,18 @@ function normalizeData(data: ScenarioData): ScenarioData {
       ...plant,
       roadRule: plant.roadRule ?? { type: 'min', quantity: 0 },
     })),
+    carriers: data.carriers.map((carrier) => ({
+      ...carrier,
+      terminalScope: normalizeTerminalScope(carrier.terminalScope),
+    })),
     seaRates: data.seaRates.map((rate) => ({ ...rate, terminal: normalizeTerminal(rate.terminal) })),
     roadTotalRule: data.roadTotalRule ?? legacyTotalRule,
   }
+}
+
+function normalizeTerminalScope(value: TerminalScope | undefined): TerminalScope {
+  if (!value || value === 'all') return 'all'
+  return normalizeTerminal(value) as TerminalScope
 }
 
 export function saveState(state: StoredAppState) {

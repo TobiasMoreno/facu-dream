@@ -1,3 +1,5 @@
+import type { TerminalScope } from './constants'
+
 export type RoadRuleType = 'exact' | 'min' | 'max'
 export type OptimizationStatus = 'idle' | 'optimal' | 'infeasible' | 'invalid' | 'error'
 
@@ -12,6 +14,7 @@ export interface Plant {
 export interface Carrier {
   id: string
   name: string
+  terminalScope: TerminalScope
   min: number
   max: number | null
 }
@@ -54,6 +57,7 @@ export interface Allocation {
 export interface CarrierSummary {
   carrierId: string
   carrier: string
+  terminalScope: TerminalScope
   quantity: number
   min: number
   max: number | null

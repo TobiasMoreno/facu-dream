@@ -93,6 +93,7 @@ h1 { font: 800 clamp(34px, 4vw, 54px)/1.05 Manrope; margin: 9px 0 12px; letter-s
 }
 .data-table input:focus, .data-table select:focus, .road-rule-grid input:focus, .road-rule-grid select:focus, .road-costs input:focus { border-color: var(--orange); box-shadow: 0 0 0 3px #ef6a3a12; }
 .number-input { max-width: 260px; font-variant-numeric: tabular-nums; }
+.carrier-data-table { min-width: 760px; }
 .cell-action { width: 55px; text-align: right; }
 .icon-button { border: 0; background: transparent; padding: 8px; color: var(--ink-soft); border-radius: 3px; }
 .icon-button.danger:hover { color: #bd3e2e; background: #fbe9e5; }
