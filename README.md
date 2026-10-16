@@ -37,7 +37,7 @@ La suite confirma, entre otras cosas, que el caso inicial tiene un costo óptimo
 2. Deshabilitá un flujo con su interruptor si no debe participar.
 3. En **Resultado**, presioná **Optimizar**. Los errores de datos y las causas detectables de inviabilidad se presentan por separado.
 4. Creá, duplicá, renombrá o eliminá escenarios desde la barra superior. Cada cambio se guarda automáticamente en `localStorage`.
-5. Después de optimizar dos escenarios, abrí **Comparar** para contrastar costo y distribución.
+5. En **Comparar**, cargá la distribución efectiva del escenario activo. La aplicación toma automáticamente los costos unitarios de las tarifas marítimas y rodoviarias, y contrasta costo, promedio y cantidades contra la simulación óptima.
 6. Usá **Exportar** para descargar todos los escenarios en JSON e **Importar** para restaurarlos en otro navegador.
 
 ## Persistencia y privacidad

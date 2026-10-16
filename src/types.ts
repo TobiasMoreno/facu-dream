@@ -77,11 +77,21 @@ export interface OptimizationResult {
   optimizedAt?: string
 }
 
+export interface EffectiveAllocation {
+  id: string
+  plantId: string
+  mode: 'Marítimo' | 'Rodoviario'
+  carrierName?: string
+  terminal?: string
+  quantity: number
+}
+
 export interface Scenario {
   id: string
   name: string
   data: ScenarioData
   result?: OptimizationResult
+  effectiveDistribution?: EffectiveAllocation[]
   updatedAt: string
 }
 

@@ -40,9 +40,10 @@ import type { LabelProps } from 'recharts'
 import { cloneInitialData, createInitialScenario } from './data/defaultScenario'
 import { CARRIER_TERMINAL_OPTIONS, TERMINALS, terminalScopeLabel, type Terminal, type TerminalScope } from './constants'
 import { optimizeTransport } from './lib/optimizer'
+import { calculateEffectiveDistribution, effectiveFlowKey, effectiveFromOptimization } from './lib/effectiveDistribution'
 import { loadState, normalizeState, saveState } from './lib/storage'
 import { validateScenario } from './lib/validation'
-import type { Carrier, OptimizationResult, Plant, Scenario, ScenarioData, SeaRate, StoredAppState } from './types'
+import type { Carrier, EffectiveAllocation, OptimizationResult, Plant, Scenario, ScenarioData, SeaRate, StoredAppState } from './types'
 
 type View = 'data' | 'result' | 'compare'
 
@@ -230,7 +231,7 @@ function App() {
 
         {view === 'data' && <DataView data={active.data} updateData={updateData} onOptimize={runOptimization} />}
         {view === 'result' && <ResultView result={active.result} data={active.data} optimizing={optimizing} onOptimize={runOptimization} />}
-        {view === 'compare' && <CompareView scenarios={state.scenarios} />}
+        {view === 'compare' && <CompareView scenario={active} onChange={(effectiveDistribution) => updateActive({ effectiveDistribution })} />}
       </main>
 
       {notice && <div className="toast"><CheckCircle2 size={18} /> {notice}</div>}
@@ -480,37 +481,79 @@ function FailureResult({ result }: { result: OptimizationResult }) {
   return <div className="failure-result"><span className="failure-icon">{invalid ? <FileJson /> : <AlertTriangle />}</span><span className="eyebrow">{invalid ? 'ERROR DE DATOS' : result.status === 'infeasible' ? 'ESCENARIO INVIABLE' : 'ERROR DEL OPTIMIZADOR'}</span><h2>{invalid ? 'Hay datos que necesitan revisión.' : result.status === 'infeasible' ? 'No existe una solución que cumpla todo.' : 'No se pudo completar el cálculo.'}</h2><p>No se modificó ninguna restricción. Corregí la causa y volvé a optimizar.</p><ul>{result.messages.map((message) => <li key={message}>{message}</li>)}</ul></div>
 }
 
-function CompareView({ scenarios }: { scenarios: Scenario[] }) {
-  const [leftId, setLeftId] = useState(scenarios[0]?.id ?? '')
-  const [rightId, setRightId] = useState(scenarios[1]?.id ?? scenarios[0]?.id ?? '')
-  const left = scenarios.find((item) => item.id === leftId) ?? scenarios[0]
-  const right = scenarios.find((item) => item.id === rightId) ?? scenarios[0]
-  const validComparison = left?.result?.status === 'optimal' && right?.result?.status === 'optimal'
-  const delta = validComparison ? (right.result!.totalCost ?? 0) - (left.result!.totalCost ?? 0) : 0
-  const distributionRows = useMemo(() => {
-    const keys = new Set([...(left?.result?.allocations ?? []).map(allocationKey), ...(right?.result?.allocations ?? []).map(allocationKey)])
-    return [...keys].map((key) => ({
-      key,
-      left: left?.result?.allocations.find((item) => allocationKey(item) === key)?.quantity ?? 0,
-      right: right?.result?.allocations.find((item) => allocationKey(item) === key)?.quantity ?? 0,
-    }))
-  }, [left, right])
+function CompareView({ scenario, onChange }: { scenario: Scenario; onChange: (rows: EffectiveAllocation[]) => void }) {
+  const effective = useMemo(() => scenario.effectiveDistribution ?? [], [scenario.effectiveDistribution])
+  const calculation = useMemo(() => calculateEffectiveDistribution(scenario.data, effective), [scenario.data, effective])
+  const simulation = scenario.result?.status === 'optimal' ? scenario.result : undefined
+  const carrierNames = scenario.data.carriers
+    .map((carrier) => carrier.name)
+    .filter((name, index, names) => names.findIndex((item) => normalizeCarrierName(item) === normalizeCarrierName(name)) === index)
+  const validComparison = Boolean(simulation && effective.length && !calculation.errors.length)
+  const delta = validComparison ? calculation.totalCost - (simulation?.totalCost ?? 0) : 0
 
-  return <div className="view-stack enter"><div className="intro-grid"><div><span className="eyebrow orange">ANÁLISIS DE ALTERNATIVAS</span><h1>Comparar escenarios</h1><p>Contrastá costo y distribución entre dos configuraciones que ya hayan sido optimizadas.</p></div><div className="compare-icon"><ArrowLeftRight /></div></div>
-    <section className="compare-picker"><ScenarioPicker label="Escenario A" value={leftId} scenarios={scenarios} onChange={setLeftId} /><span className="versus">VS</span><ScenarioPicker label="Escenario B" value={rightId} scenarios={scenarios} onChange={setRightId} /></section>
-    {!validComparison ? <div className="validation-panel info"><Info /><div><strong>Falta optimizar uno o ambos escenarios.</strong><p>Abrí cada escenario, ejecutá “Optimizar” y regresá a esta comparación.</p></div></div> : <>
-      <div className="comparison-cards"><ComparisonCard label={left.name} result={left.result!} /><div className={delta === 0 ? 'delta neutral' : delta > 0 ? 'delta bad' : 'delta good'}><span>Diferencia B − A</span><strong>{delta >= 0 ? '+' : '−'}{money.format(Math.abs(delta))}</strong><small>{delta === 0 ? 'Mismo costo total' : delta > 0 ? 'B es más costoso' : 'B es más económico'}</small></div><ComparisonCard label={right.name} result={right.result!} /></div>
-      <section className="panel"><SectionHeader number="01" icon={<ArrowLeftRight />} title="Diferencias de distribución" description="Cantidad de vehículos por flujo en cada resultado." /><div className="table-scroll"><table className="result-table"><thead><tr><th>Flujo</th><th className="right">{left.name}</th><th className="right">{right.name}</th><th className="right">Diferencia</th></tr></thead><tbody>{distributionRows.map((row) => <tr key={row.key}><td>{row.key}</td><td className="right mono">{integer.format(row.left)}</td><td className="right mono">{integer.format(row.right)}</td><td className="right mono strong">{row.right - row.left > 0 ? '+' : ''}{integer.format(row.right - row.left)}</td></tr>)}</tbody></table></div></section>
+  const updateRow = (id: string, updates: Partial<EffectiveAllocation>) =>
+    onChange(effective.map((row) => row.id === id ? { ...row, ...updates } : row))
+  const addRow = () => onChange([...effective, {
+    id: crypto.randomUUID(),
+    plantId: scenario.data.plants[0]?.id ?? '',
+    mode: 'Marítimo',
+    carrierName: carrierNames[0] ?? '',
+    terminal: TERMINALS[0],
+    quantity: 0,
+  }])
+  const flowComparison = useMemo(() => {
+    const simulated = new Map<string, number>()
+    const actual = new Map<string, number>()
+    scenario.result?.allocations.forEach((row) => simulated.set(allocationKey(row), (simulated.get(allocationKey(row)) ?? 0) + row.quantity))
+    calculation.rows.forEach((row) => actual.set(effectiveFlowKey(row), (actual.get(effectiveFlowKey(row)) ?? 0) + row.quantity))
+    return [...new Set([...simulated.keys(), ...actual.keys()])].map((key) => ({ key, simulated: simulated.get(key) ?? 0, actual: actual.get(key) ?? 0 }))
+  }, [scenario.result, calculation.rows])
+
+  return <div className="view-stack enter">
+    <div className="intro-grid"><div><span className="eyebrow orange">SIMULACIÓN VS. REALIDAD</span><h1>Comparar distribución</h1><p>Cargá el transporte efectivo y medí su costo contra la solución óptima de {scenario.name}. Las tarifas se heredan automáticamente de Datos.</p></div><div className="compare-icon"><ArrowLeftRight /></div></div>
+
+    {!simulation && <div className="validation-panel info"><Info /><div><strong>El escenario todavía no tiene una solución óptima.</strong><p>Podés cargar la distribución efectiva ahora, pero necesitás optimizar el escenario para calcular la diferencia.</p></div></div>}
+
+    <section className="panel">
+      <SectionHeader number="01" icon={<Truck />} title="Distribución efectiva" description="Ingresá lo realmente transportado. El costo unitario proviene de las tarifas del escenario." action={<div className="section-button-group"><button className="button-secondary" onClick={() => simulation && onChange(effectiveFromOptimization(simulation))} disabled={!simulation}><Copy size={16} /> Copiar simulación</button><button className="button-secondary" onClick={addRow} disabled={!scenario.data.plants.length}><Plus size={16} /> Agregar movimiento</button></div>} />
+      <div className="table-scroll">
+        <table className="data-table effective-table">
+          <thead><tr><th>Planta</th><th>Modalidad</th><th>Naviera</th><th>Terminal</th><th>Cantidad</th><th className="right">Costo unit.</th><th className="right">Subtotal</th><th aria-label="Acciones" /></tr></thead>
+          <tbody>{effective.map((row) => {
+            const calculated = calculation.rows.find((item) => item.id === row.id)
+            return <tr key={row.id} className={calculated?.error ? 'error-row' : ''}>
+              <td><select value={row.plantId} onChange={(event) => updateRow(row.id, { plantId: event.target.value })}>{scenario.data.plants.map((plant) => <option key={plant.id} value={plant.id}>{plant.name}</option>)}</select></td>
+              <td><select value={row.mode} onChange={(event) => updateRow(row.id, event.target.value === 'Rodoviario' ? { mode: 'Rodoviario', carrierName: undefined, terminal: undefined } : { mode: 'Marítimo', carrierName: carrierNames[0] ?? '', terminal: TERMINALS[0] })}><option value="Marítimo">Marítimo</option><option value="Rodoviario">Rodoviario</option></select></td>
+              <td>{row.mode === 'Marítimo' ? <select value={row.carrierName ?? ''} onChange={(event) => updateRow(row.id, { carrierName: event.target.value })}>{carrierNames.map((name) => <option key={name} value={name}>{name}</option>)}</select> : <span className="not-applicable">—</span>}</td>
+              <td>{row.mode === 'Marítimo' ? <select value={row.terminal ?? TERMINALS[0]} onChange={(event) => updateRow(row.id, { terminal: event.target.value })}>{TERMINALS.map((terminal) => <option key={terminal} value={terminal}>{terminal}</option>)}</select> : <span className="not-applicable">—</span>}</td>
+              <td><input className="number-input" type="number" min="0" step="1" value={row.quantity} onChange={(event) => updateRow(row.id, { quantity: numberValue(event.target.value) })} /></td>
+              <td className="right derived-cost">{calculated?.unitCost === null || calculated?.unitCost === undefined ? <span>Sin tarifa</span> : money.format(calculated.unitCost)}</td>
+              <td className="right derived-cost strong">{calculated?.totalCost === null || calculated?.totalCost === undefined ? '—' : money.format(calculated.totalCost)}</td>
+              <td className="cell-action"><button className="icon-button danger" onClick={() => onChange(effective.filter((item) => item.id !== row.id))} aria-label="Eliminar movimiento"><Trash2 size={17} /></button></td>
+            </tr>
+          })}</tbody>
+          {effective.length > 0 && <tfoot><tr><td colSpan={4}>TOTAL EFECTIVO</td><td>{integer.format(calculation.totalVehicles)}</td><td /><td className="right">{money.format(calculation.totalCost)}</td><td /></tr></tfoot>}
+        </table>
+      </div>
+      {!effective.length && <div className="effective-empty"><Truck /><strong>Todavía no cargaste movimientos efectivos.</strong><span>Agregalos manualmente o copiá la simulación como punto de partida.</span></div>}
+    </section>
+
+    {calculation.errors.length > 0 && <ValidationPanel errors={calculation.errors} />}
+
+    {effective.length > 0 && <>
+      <div className="comparison-cards">
+        <ComparisonSnapshot label="Simulación óptima" totalCost={simulation?.totalCost} averageCost={simulation?.averageCost} totalVehicles={simulation?.totalVehicles ?? 0} muted={!simulation} />
+        <div className={!validComparison || delta === 0 ? 'delta neutral' : delta > 0 ? 'delta bad' : 'delta good'}><span>Diferencia efectiva − óptima</span><strong>{validComparison ? `${delta >= 0 ? '+' : '−'}${money.format(Math.abs(delta))}` : 'Pendiente'}</strong><small>{!validComparison ? 'Completá los datos requeridos' : delta === 0 ? 'Mismo costo total' : delta > 0 ? 'La efectiva es más costosa' : 'La efectiva es más económica'}</small></div>
+        <ComparisonSnapshot label="Distribución efectiva" totalCost={calculation.totalCost} averageCost={calculation.averageCost} totalVehicles={calculation.totalVehicles} muted={Boolean(calculation.errors.length)} />
+      </div>
+
+      <section className="panel"><SectionHeader number="02" icon={<ArrowLeftRight />} title="Diferencias de distribución" description="Cantidad simulada y efectiva para cada flujo." /><div className="table-scroll"><table className="result-table"><thead><tr><th>Flujo</th><th className="right">Simulación</th><th className="right">Efectiva</th><th className="right">Diferencia</th></tr></thead><tbody>{flowComparison.map((row) => <tr key={row.key}><td>{row.key}</td><td className="right mono">{integer.format(row.simulated)}</td><td className="right mono">{integer.format(row.actual)}</td><td className="right mono strong">{row.actual - row.simulated > 0 ? '+' : ''}{integer.format(row.actual - row.simulated)}</td></tr>)}</tbody></table></div></section>
     </>}
   </div>
 }
 
-function ScenarioPicker({ label, value, scenarios, onChange }: { label: string; value: string; scenarios: Scenario[]; onChange: (id: string) => void }) {
-  return <label><span>{label}</span><div className="select-shell"><select value={value} onChange={(event) => onChange(event.target.value)}>{scenarios.map((scenario) => <option key={scenario.id} value={scenario.id}>{scenario.name}</option>)}</select><ChevronDown size={17} /></div></label>
-}
-
-function ComparisonCard({ label, result }: { label: string; result: OptimizationResult }) {
-  return <article className="comparison-card"><span>{label}</span><strong>{money.format(result.totalCost ?? 0)}</strong><small>{money.format(result.averageCost ?? 0)} / vehículo</small><div><Ship size={16} /> {integer.format(result.allocations.filter((item) => item.mode === 'Marítimo').reduce((sum, item) => sum + item.quantity, 0))}<Truck size={16} /> {integer.format(result.roadByPlant.reduce((sum, item) => sum + item.quantity, 0))}</div></article>
+function ComparisonSnapshot({ label, totalCost, averageCost, totalVehicles, muted }: { label: string; totalCost?: number; averageCost?: number; totalVehicles: number; muted?: boolean }) {
+  return <article className={muted ? 'comparison-card is-muted' : 'comparison-card'}><span>{label}</span><strong>{totalCost === undefined ? 'Pendiente' : money.format(totalCost)}</strong><small>{averageCost === undefined ? 'Sin calcular' : `${money.format(averageCost)} / vehículo`}</small><div><ArrowLeftRight size={16} /> {integer.format(totalVehicles)} vehículos</div></article>
 }
 
 function allocationKey(item: OptimizationResult['allocations'][number]) {
